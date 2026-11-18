@@ -19,8 +19,10 @@ GitHub Pages should publish `main` from `/ (root)`. `.nojekyll` prevents Jekyll 
 ## Interaction
 
 - Collection: text search, region/type/museum filters, grid and horizontal views, a user-started pausable tour, random discovery, and a record dialog. Left/right arrow keys navigate objects and Escape closes the dialog.
-- Leaderboard: metric sorting in either direction, model search, overall/field views, downloadable JSON, and per-model profiles. Rows can be activated with Enter or Space.
-- The layout supports small screens, visible keyboard focus, native dialog focus handling, and reduced-motion preferences. Automatic motion is never started on page load.
+- Leaderboard: a full-width interactive SVG bar-and-dot ranking chart, placed immediately below the compact hero. Switch among Mean, Ctx, Acc, and all five individual fields; reverse the point-estimate sort; search endpoints; hover or focus a model for exact values, coverage, and reported 95% confidence intervals. Click a model or press Enter/Space to select it for comparison. No HTML table is used.
+- Model comparison: select any two endpoints by name or from the ranking. A second large grouped bar chart compares their five field scores on a shared 0–100% scale; Mean/Ctx/Acc summaries show descriptive A−B differences in percentage points. Selections persist across metric switches and sorting.
+- Plot semantics: every ranking axis starts at zero, and its upper bound covers all nine endpoints and reported CI bounds, independent of search. Only Mean/Ctx/Acc have confidence intervals and pooled references in the release; individual-field views do not invent them. Point-estimate ordering is exploratory; no significance claim is inferred from marginal intervals.
+- The wide desktop layout uses 94% of the viewport, a 20 px base font, and large directly labelled plots. Small screens use stacked ranking rows and a 92% layout without page-level horizontal scrolling. The layout supports visible keyboard focus, native dialog focus handling, and reduced-motion preferences. Automatic motion is never started on page load.
 
 ## Data provenance
 

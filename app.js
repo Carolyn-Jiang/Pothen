@@ -11,7 +11,7 @@ const firstRef = (object, key) => object.reference?.[key]?.[0] || 'Not recorded'
 const imageURL = object => object.localImage || object.image;
 const format = value => Number(value).toFixed(2);
 let collection = [], filteredObjects = [], visibleLimit = 12, currentObject = null;
-let tableData = null, sortMetric = 'acc', sortDirection = -1, tableView = 'overall';
+let tableData = null, sortMetric = 'acc', sortDirection = -1;
 let tourTimer = null;
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -139,50 +139,175 @@ function setGalleryView(view) {
   }
 }
 
-function cell(row,key,pooled = false) {
-  if (row[key] === undefined) return '<td>—</td>';
-  if (key === 'valid' || key === 'invalid') return `<td${key === sortMetric ? ' class="sort-cell"' : ''}>${row[key].toLocaleString('en-US')}</td>`;
-  const ci = row.ci?.[key];
-  return `<td class="metric-cell${key === sortMetric ? ' sort-cell' : ''}"><span class="metric-value">${format(row[key])}</span>${ci ? `<span class="ci">[${format(ci[0])}, ${format(ci[1])}]</span>` : ''}${key === sortMetric && !pooled ? `<span class="mini-bar" style="--bar-width:${row[key]}%" aria-hidden="true"></span>` : ''}</td>`;
+const metricInfo = {
+  acc:{title:'Complete-record accuracy',description:'All five fields compatible with the museum record.'},
+  ctx:{title:'Context accuracy',description:'Culture, period, origin and creator all compatible.'},
+  mean:{title:'Mean field compatibility',description:'Average compatibility across the five catalogue fields.'},
+  title:{title:'Title compatibility',description:'Recovery of the museum object name or title.'},
+  culture:{title:'Culture compatibility',description:'Compatibility with the recorded cultural affiliation.'},
+  period:{title:'Period compatibility',description:'Compatibility with the recorded date or historical period.'},
+  origin:{title:'Origin compatibility',description:'Compatibility with the recorded place of production or discovery.'},
+  creator:{title:'Creator compatibility',description:'Compatibility with the recorded maker, including explicitly unknown creators.'}
+};
+let selectedModels = ['Qwen3-VL-Flash','GPT-5.4-mini'];
+const chartColors = ['#21482D','#BC603D'];
+const svgText = (x,y,value,extra='') => `<text x="${x}" y="${y}" ${extra}>${text(value)}</text>`;
+
+function metricScale(metric) {
+  const upper = Math.max(...tableData.rows.map(row => row.ci?.[metric]?.[1] ?? row[metric]));
+  const step = upper <= 10 ? 2 : upper <= 25 ? 5 : 10;
+  return {max:Math.ceil(upper/step)*step,step};
+}
+
+function rowDescription(row,metric) {
+  const interval = row.ci?.[metric];
+  return `${row.model}. ${metricInfo[metric].title}: ${format(row[metric])} percent.${interval ? ` 95 percent object-bootstrap interval: ${format(interval[0])} to ${format(interval[1])} percent.` : ' Confidence interval not reported for this field.'} ${row.valid} valid outputs, ${row.invalid} invalid. ${selectedModels.includes(row.model) ? 'Selected for comparison.' : 'Activate to compare this model.'}`;
 }
 
 function renderLeaderboard() {
   if (!tableData) return;
-  const fields = tableView === 'fields' ? ['title','culture','period','origin','creator','mean','ctx','acc','valid','invalid'] : ['mean','ctx','acc','valid','invalid'];
+  const container = $('#ranking-chart');
+  const focusedModel = document.activeElement?.dataset?.rankModel;
+  const width = Math.max(270,Math.floor(container.getBoundingClientRect().width)-26);
+  const compact = width < 900;
+  const rowHeight = compact ? 110 : 65;
+  const left = compact ? 16 : 350;
+  const right = compact ? 16 : 132;
+  const plotWidth = width-left-right;
+  const top = 48;
   const query = $('#model-search').value.toLocaleLowerCase().trim();
-  const rows = tableData.rows.filter(r => r.model.toLocaleLowerCase().includes(query)).sort((a,b) => (a[sortMetric] - b[sortMetric]) * sortDirection || a.model.localeCompare(b.model));
-  $('#results-head').innerHTML = `<tr><th scope="col">#</th><th scope="col">Model endpoint</th>${fields.map(key => `<th scope="col" aria-sort="${key === sortMetric ? sortDirection === -1 ? 'descending' : 'ascending' : 'none'}"><button type="button" data-sort="${key}" aria-pressed="${key === sortMetric}" aria-label="Sort by ${labels[key]}">${labels[key]} <span aria-hidden="true">${key === sortMetric ? sortDirection === -1 ? '↓' : '↑' : '↕'}</span></button></th>`).join('')}</tr>`;
-  $('#results-body').innerHTML = rows.length ? rows.map((row,i) => `<tr tabindex="0" data-model="${text(row.model)}" aria-label="${text(row.model)}; ${labels[sortMetric]} ${format(row[sortMetric])}${sortMetric === 'valid' || sortMetric === 'invalid' ? '' : ' percent'}; press Enter for profile"><td>${String(i+1).padStart(2,'0')}</td><td>${text(row.model)}</td>${fields.map(key => cell(row,key)).join('')}</tr>`).join('') : `<tr><td colspan="${fields.length+2}">No model endpoints match your search.</td></tr>`;
-  $('#results-foot').innerHTML = `<tr><td>—</td><td>Pooled</td>${fields.map(key => cell(tableData.pooled,key,true)).join('')}</tr>`;
-  $('#leaderboard-status').textContent = `${rows.length} endpoints, sorted by ${labels[sortMetric]}, ${sortDirection === -1 ? 'highest first' : 'lowest first'}.`;
+  const rows = tableData.rows.filter(row => row.model.toLocaleLowerCase().includes(query)).sort((a,b) => (a[sortMetric]-b[sortMetric])*sortDirection || a.model.localeCompare(b.model));
+  const scale = metricScale(sortMetric);
+  const sx = value => left+value/scale.max*plotWidth;
+  const bottom = top+rows.length*rowHeight;
+  const height = Math.max(170,bottom+55);
+  const pooled = tableData.pooled[sortMetric];
+  const hasCI = ['mean','ctx','acc'].includes(sortMetric);
+  $('#active-metric-title').textContent = metricInfo[sortMetric].title;
+  $('#active-metric-description').textContent = metricInfo[sortMetric].description;
+  $('#interval-key').hidden = !hasCI;
+  $('.key-pooled').parentElement.hidden = pooled === undefined;
+  $('#chart-uncertainty-note').textContent = hasCI
+    ? 'Whiskers: 95% object-bootstrap intervals (10,000 shared resamples). Sorting shows point estimates; overlapping intervals limit fine-grained ranking.'
+    : 'Field-specific confidence intervals are not reported in the release. These bars show point estimates. Sorting is exploratory, not a test of significance.';
+  for (const button of document.querySelectorAll('[data-metric]')) {
+    const active = button.dataset.metric === sortMetric;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-pressed',String(active));
+  }
+  $('#sort-toggle').textContent = sortDirection === -1 ? 'Highest first ↓' : 'Lowest first ↑';
+  if (!rows.length) {
+    container.innerHTML = '<p class="empty-state">No model matches your search. Clear the search to restore all nine endpoints.</p>';
+    $('#leaderboard-status').textContent = 'No matching models.';
+    return;
+  }
+  let markup = `<svg class="ranking-svg" viewBox="0 0 ${width} ${height}" aria-labelledby="ranking-svg-title ranking-svg-description"><title id="ranking-svg-title">${text(metricInfo[sortMetric].title)} across ${rows.length} model endpoints</title><desc id="ranking-svg-description">Bars begin at zero. Select two models to compare their five field scores. Values are percentages of valid outputs.${hasCI ? ' Whiskers show 95 percent object-bootstrap confidence intervals.' : ' Field confidence intervals are not reported.'}</desc>`;
+  for (let tick=0;tick<=scale.max;tick+=scale.step) {
+    const x=sx(tick);
+    markup+=`<line x1="${x}" y1="${top-8}" x2="${x}" y2="${bottom}" stroke="#D4CFC3" stroke-width="1"/>`;
+    markup+=svgText(x,25,`${tick}%`,`text-anchor="${tick===0?'start':tick===scale.max?'end':'middle'}" fill="#62685b" font-size="${compact?15:18}"`);
+  }
+  if (!compact) markup+=svgText(18,25,'MODEL ENDPOINT','fill="#62685b" font-size="15" letter-spacing="1.1"');
+  if (pooled !== undefined) markup+=`<line class="pooled-reference" x1="${sx(pooled)}" y1="${top-8}" x2="${sx(pooled)}" y2="${bottom}" stroke="#BC603D" stroke-width="2" stroke-dasharray="6 6" opacity=".8"/>`;
+  for (let index=0;index<rows.length;index++) {
+    const row=rows[index];
+    const y=top+index*rowHeight;
+    const center=compact?y+56:y+27;
+    const selected=selectedModels.indexOf(row.model);
+    const color=selected===1?chartColors[1]:chartColors[0];
+    const labelY=compact?y+24:center-3;
+    const barEnd=sx(row[sortMetric]);
+    const ci=row.ci?.[sortMetric];
+    const rank=String(index+1).padStart(2,'0');
+    markup+=`<g class="rank-row" role="button" tabindex="0" data-rank-model="${text(row.model)}" aria-label="${text(rowDescription(row,sortMetric))}" aria-pressed="${selected>=0}"><title>${text(rowDescription(row,sortMetric))}</title><rect class="row-highlight" x="2" y="${y-2}" width="${width-4}" height="${rowHeight-3}" rx="6"/>`;
+    if (selected>=0) markup+=`<circle cx="${compact?26:24}" cy="${labelY-7}" r="12" fill="${color}"/>`+svgText(compact?26:24,labelY-2,selected===0?'A':'B','fill="white" font-size="14" text-anchor="middle"');
+    else markup+=svgText(compact?16:14,labelY,rank,'fill="#62685b" font-size="15"');
+    markup+=svgText(compact?49:50,labelY,row.model,`fill="#21482D" font-size="${compact?18:22}" font-weight="${selected>=0?'600':'400'}"`);
+    if (!compact) markup+=svgText(50,center+18,`${row.valid} valid · ${row.invalid} invalid`,'fill="#62685b" font-size="16"');
+    markup+=`<rect x="${left}" y="${center-11}" width="${Math.max(0,barEnd-left)}" height="22" rx="3" fill="${color}" opacity="${selected>=0?'.82':'.43'}" class="bar-fill"/>`;
+    if (ci) {
+      const segments=`<line x1="${sx(ci[0])}" y1="${center}" x2="${sx(ci[1])}" y2="${center}"/><line x1="${sx(ci[0])}" y1="${center-8}" x2="${sx(ci[0])}" y2="${center+8}"/><line x1="${sx(ci[1])}" y1="${center-8}" x2="${sx(ci[1])}" y2="${center+8}"/>`;
+      markup+=`<g class="ci-halo" stroke="#fcfaf5" stroke-width="5.5">${segments}</g><g class="ci-whisker" stroke="${color}" stroke-width="2.2">${segments}</g>`;
+    }
+    markup+=`<circle cx="${barEnd}" cy="${center}" r="5" fill="${color}" stroke="#fcfaf5" stroke-width="1.2"/>`;
+    markup+=svgText(compact?width-15:width-14,compact?center+34:center+7,`${format(row[sortMetric])}%`,`text-anchor="end" fill="${color}" font-size="${compact?21:25}" font-weight="600"`);
+    if (compact) markup+=svgText(left,center+34,`${row.valid} valid · ${row.invalid} invalid`,'fill="#62685b" font-size="14"');
+    markup+='</g>';
+  }
+  if (pooled!==undefined) markup+=svgText(sx(pooled),bottom+32,`Pooled ${format(pooled)}%`,'text-anchor="middle" fill="#BC603D" font-size="16"');
+  markup+='</svg>';
+  container.innerHTML=markup;
+  if(focusedModel){const target=[...container.querySelectorAll('[data-rank-model]')].find(group=>group.dataset.rankModel===focusedModel);target?.focus({preventScroll:true});}
+  $('#leaderboard-status').textContent=`${rows.length} models sorted by ${metricInfo[sortMetric].title}, ${sortDirection===-1?'highest':'lowest'} first. Selected: ${selectedModels.join(' and ')}.`;
 }
 
-function showProfile(model) {
-  const row = tableData.rows.find(r => r.model === model);
+function showChartTooltip(group,event) {
+  const row=tableData?.rows.find(row=>row.model===group.dataset.rankModel);
   if (!row) return;
-  const profile = $('#model-profile');
-  profile.hidden = false;
-  profile.innerHTML = `<div class="profile-heading"><h3>${text(row.model)}</h3><button type="button" class="plain-button" id="close-profile" aria-label="Close model profile">Close ×</button></div><p class="method-note">${row.valid} valid outputs · ${row.invalid} invalid · ${format(row.acc)}% complete-record compatibility · ${format(row.ctx)}% contextual compatibility</p><div class="profile-bars">${['title','culture','period','origin','creator'].map(key => `<div><div class="profile-label"><span>${labels[key]}</span><b>${format(row[key])}%</b></div><div class="profile-track"><span style="--bar-width:${row[key]}%"></span></div></div>`).join('')}</div>`;
-  for (const tr of document.querySelectorAll('[data-model]')) tr.setAttribute('aria-selected',String(tr.dataset.model === model));
-  $('#close-profile').addEventListener('click',() => {profile.hidden = true; for (const tr of document.querySelectorAll('[data-model]')) tr.removeAttribute('aria-selected');});
+  const ci=row.ci?.[sortMetric];
+  const tooltip=$('#chart-tooltip');
+  tooltip.innerHTML=`<strong>${text(row.model)}</strong>${text(metricInfo[sortMetric].title)}: <b>${format(row[sortMetric])}%</b><br>${ci?`95% CI: ${format(ci[0])}–${format(ci[1])}%`:'Field CI not reported'}<br><small>${row.valid} valid · ${row.invalid} invalid outputs<br>Click / Enter to compare this model.</small>`;
+  tooltip.hidden=false;
+  const box=group.getBoundingClientRect();
+  const x=event?.clientX??box.left+box.width*.5;
+  const y=event?.clientY??box.top+25;
+  const rect=tooltip.getBoundingClientRect();
+  tooltip.style.left=`${Math.max(12,Math.min(innerWidth-rect.width-12,x+18))}px`;
+  tooltip.style.top=`${Math.max(12,Math.min(innerHeight-rect.height-12,y+18))}px`;
+}
+
+function selectModel(model) {
+  if (selectedModels.includes(model)) return;
+  selectedModels=[selectedModels[1],model];
+  $('#chart-tooltip').hidden=true;
+  renderLeaderboard();
+  renderComparison();
+}
+
+function renderComparison() {
+  if (!tableData) return;
+  const [a,b]=selectedModels.map(model=>tableData.rows.find(row=>row.model===model));
+  if (!a||!b) return;
+  $('#comparison-selectors').innerHTML=[a,b].map((row,index)=>`<div class="compare-model ${index===1?'model-b':''}"><span class="compare-letter">${index===0?'A':'B'}</span><label><span>MODEL ${index===0?'A':'B'}</span><select data-compare-index="${index}" aria-label="Comparison model ${index===0?'A':'B'}">${tableData.rows.map(option=>`<option value="${text(option.model)}"${option.model===row.model?' selected':''}>${text(option.model)}</option>`).join('')}</select></label></div>`).join('');
+  $('#comparison-summary').innerHTML=[['mean','Mean field'],['ctx','Context · Ctx'],['acc','Complete record · Acc']].map(([key,label])=>`<div class="compare-stat"><span>${label}</span><div class="compare-stat-values"><b>${format(a[key])}%</b><b class="value-b">${format(b[key])}%</b><small>A − B: ${a[key]-b[key]>=0?'+':''}${format(a[key]-b[key])} pp</small></div></div>`).join('');
+  const container=$('#comparison-chart');
+  const width=Math.max(250,Math.floor(container.getBoundingClientRect().width));
+  const compact=width<700;
+  const left=compact?14:150,right=compact?58:90,plotWidth=width-left-right;
+  const rowHeight=compact?117:94,top=40,height=top+5*rowHeight+25;
+  const sx=value=>left+value/100*plotWidth;
+  let markup=`<svg viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="compare-svg-title compare-svg-description"><title id="compare-svg-title">${text(a.model)} versus ${text(b.model)} across five metadata fields</title><desc id="compare-svg-description">Forest green represents ${text(a.model)}. Terracotta represents ${text(b.model)}. Percentage scale begins at zero and ends at 100. Field-specific confidence intervals are not reported. ${['title','culture','period','origin','creator'].map(key=>`${labels[key]}: ${text(a.model)} ${format(a[key])} percent; ${text(b.model)} ${format(b[key])} percent.`).join(' ')}</desc>`;
+  for(let tick=0;tick<=100;tick+=20){const x=sx(tick);markup+=`<line x1="${x}" y1="${top-7}" x2="${x}" y2="${height-20}" stroke="#c3c5b8" stroke-width="1"/>`+svgText(x,20,`${tick}%`,`text-anchor="${tick===0?'start':tick===100?'end':'middle'}" font-size="${compact?13:17}" fill="#62685b"`);}
+  ['title','culture','period','origin','creator'].forEach((key,index)=>{
+    const y=top+index*rowHeight;
+    markup+=svgText(compact?left:5,compact?y+18:y+40,labels[key],`font-size="${compact?20:23}" fill="#21482D"`);
+    [a,b].forEach((row,modelIndex)=>{
+      const yy=y+(compact?35:12)+modelIndex*28;
+      const value=row[key];
+      markup+=`<g><title>${text(row.model)}: ${labels[key]} ${format(value)} percent</title><rect x="${left}" y="${yy}" width="${sx(value)-left}" height="19" rx="3" fill="${chartColors[modelIndex]}"/><circle cx="${sx(value)}" cy="${yy+9.5}" r="4" fill="${chartColors[modelIndex]}"/>`+svgText(sx(value)+11,yy+16,`${format(value)}%`,`font-size="${compact?15:20}" fill="${chartColors[modelIndex]}"`)+`</g>`;
+    });
+  });
+  container.innerHTML=markup+'</svg>';
 }
 
 function configureInteractions() {
   document.addEventListener('click',event => {
     const objectButton = event.target.closest('[data-object]');
     if (objectButton) openObject(objectButton.dataset.object);
-    const sortButton = event.target.closest('[data-sort]');
-    if (sortButton) {
-      const metric = sortButton.dataset.sort;
-      sortDirection = metric === sortMetric ? -sortDirection : -1;
-      sortMetric = metric;
-      $('#metric-select').value = metric;
-      renderLeaderboard();
-    }
-    const row = event.target.closest('[data-model]');
-    if (row) showProfile(row.dataset.model);
+    const row = event.target.closest('[data-rank-model]');
+    if (row) selectModel(row.dataset.rankModel);
+    const metric = event.target.closest('[data-metric]');
+    if (metric) {sortMetric=metric.dataset.metric;sortDirection=-1;$('#chart-tooltip').hidden=true;renderLeaderboard();}
   });
-  $('#results-table').addEventListener('keydown',event => {if (event.key === 'Enter' || event.key === ' ') {const row=event.target.closest('[data-model]');if(row){event.preventDefault();showProfile(row.dataset.model);}}});
+  $('#ranking-chart').addEventListener('keydown',event=>{const row=event.target.closest('[data-rank-model]');if(row&&(event.key==='Enter'||event.key===' ')){event.preventDefault();selectModel(row.dataset.rankModel);}});
+  $('#ranking-chart').addEventListener('pointerover',event=>{const row=event.target.closest('[data-rank-model]');if(row&&event.pointerType!=='touch')showChartTooltip(row,event);});
+  $('#ranking-chart').addEventListener('pointermove',event=>{const row=event.target.closest('[data-rank-model]');if(row&&event.pointerType!=='touch')showChartTooltip(row,event);});
+  $('#ranking-chart').addEventListener('pointerleave',()=>{$('#chart-tooltip').hidden=true;});
+  $('#ranking-chart').addEventListener('focusin',event=>{const row=event.target.closest('[data-rank-model]');if(row)showChartTooltip(row);});
+  $('#ranking-chart').addEventListener('focusout',()=>{$('#chart-tooltip').hidden=true;});
+  $('#sort-toggle').addEventListener('click',()=>{sortDirection=-sortDirection;renderLeaderboard();});
+  $('#comparison-selectors').addEventListener('change',event=>{const select=event.target.closest('[data-compare-index]');if(!select)return;const i=Number(select.dataset.compareIndex),other=1-i;const old=selectedModels[i];if(selectedModels[other]===select.value)selectedModels[other]=old;selectedModels[i]=select.value;renderLeaderboard();renderComparison();});
+  $('#reset-comparison').addEventListener('click',()=>{selectedModels=['Qwen3-VL-Flash','GPT-5.4-mini'];renderLeaderboard();renderComparison();});
   for (const selector of ['#region-filter','#type-filter','#museum-filter']) $(selector).addEventListener('change',filterCollection);
   $('#gallery-search').addEventListener('input',filterCollection);
   $('#reset-filters').addEventListener('click',() => {for (const selector of ['#region-filter','#type-filter','#museum-filter','#gallery-search']) $(selector).value = '';filterCollection();});
@@ -198,9 +323,7 @@ function configureInteractions() {
   $('#previous-object').addEventListener('click',() => navigateObject(-1));
   $('#next-object').addEventListener('click',() => navigateObject(1));
   $('#object-dialog').addEventListener('keydown',event => {if(event.key === 'ArrowLeft'){event.preventDefault();navigateObject(-1);}if(event.key === 'ArrowRight'){event.preventDefault();navigateObject(1);}});
-  for (const button of document.querySelectorAll('[data-table-view]')) button.addEventListener('click',() => {tableView=button.dataset.tableView;for(const item of document.querySelectorAll('[data-table-view]')){const active=item===button;item.classList.toggle('active',active);item.setAttribute('aria-pressed',String(active));}renderLeaderboard();});
-  $('#metric-select').addEventListener('change',() => {sortMetric=$('#metric-select').value;sortDirection=-1;if(!['mean','ctx','acc','valid','invalid'].includes(sortMetric)){tableView='fields';for(const item of document.querySelectorAll('[data-table-view]')){const active=item.dataset.tableView===tableView;item.classList.toggle('active',active);item.setAttribute('aria-pressed',String(active));}}renderLeaderboard();});
-  $('#model-search').addEventListener('input',renderLeaderboard);
+  $('#model-search').addEventListener('input',()=>{$('#chart-tooltip').hidden=true;renderLeaderboard();});
   $('#copy-citation').addEventListener('click',async () => {try{await navigator.clipboard.writeText($('#citation-text').textContent);$('#citation-status').textContent='Citation copied.';}catch{$('.citation').open=true;$('#citation-status').textContent='Select and copy the citation below.';}});
   document.addEventListener('visibilitychange',() => {if(document.hidden)stopTour();});
   reducedMotion.addEventListener('change',stopTour);
@@ -211,6 +334,6 @@ Promise.allSettled([getJSON('data/gallery.json'),getJSON('data/leaderboard.json'
   const [gallery,leaderboard] = results;
   if (gallery.status === 'fulfilled') {collection=Array.isArray(gallery.value)?gallery.value:gallery.value.objects;initializeFilters();selectHeroObjects();filterCollection();}
   else {$('#gallery-count').textContent='The collection could not be loaded. Please reload or browse the dataset on Hugging Face.';$('#discover-button').disabled=true;$('#motion-toggle').disabled=true;}
-  if (leaderboard.status === 'fulfilled') {tableData=leaderboard.value;renderLeaderboard();}
-  else {$('#results-body').innerHTML='<tr><td>The results could not be loaded. Please reload or use the downloadable dataset.</td></tr>';}
+  if (leaderboard.status === 'fulfilled') {tableData=leaderboard.value;renderLeaderboard();renderComparison();let lastWidth=0;new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(Math.abs(width-lastWidth)>2){lastWidth=width;renderLeaderboard();renderComparison();}}).observe($('#ranking-chart'));}
+  else {$('#ranking-chart').innerHTML='<p>The results could not be loaded. Please reload or use the downloadable dataset.</p>';}
 });
