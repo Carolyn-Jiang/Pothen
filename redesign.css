@@ -55,3 +55,9 @@
 .benchmark-banner .banner-result strong{color:#f0c1a2}
 @media(max-width:1050px){.benchmark-banner-top{grid-template-columns:1fr;gap:20px}.benchmark-banner .banner-statistics{grid-template-columns:repeat(4,1fr);gap:18px}.benchmark-banner-bottom{gap:24px}}
 @media(max-width:720px){.benchmark-banner.section-shell{padding:21px 22px}.benchmark-banner h2{font-size:24px}.benchmark-banner .benchmark-banner-copy p{font-size:15px}.benchmark-banner .banner-statistics dd{font-size:28px}.benchmark-banner .banner-statistics dt{font-size:11px}.benchmark-banner .banner-statistics{gap:14px}.benchmark-banner-bottom{grid-template-columns:1fr;gap:12px;margin-top:17px;padding-top:14px}.benchmark-banner .benchmark-banner-bottom p{font-size:13px}}
+
+/* Shared resource entry points stay visible in the header at every size. */
+.site-header .header-resources{display:flex;align-items:center;gap:20px;flex-shrink:0}
+.site-header .header-resources .header-paper{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.site-header .header-resources .header-paper span{margin-left:0}
+@media(max-width:800px){.site-header{display:grid;grid-template-columns:auto 1fr;gap:13px 16px}.site-header>.wordmark{grid-column:1;grid-row:1}.site-header>.header-resources{grid-column:2;grid-row:1;justify-self:end}.site-header>nav{grid-column:1/-1;grid-row:2;justify-content:center;justify-self:center;flex-wrap:wrap}}
