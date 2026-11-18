@@ -25,6 +25,29 @@ function imageMarkup(object, eager = false) {
   return `<img src="${text(imageURL(object))}" alt="${text(object.title)}" loading="${eager ? 'eager' : 'lazy'}" decoding="async">`;
 }
 
+function renderImageCredits() {
+  const list = $('#image-credits-list');
+  if (!list) return;
+  const link = (url,label,description='') => {
+    try { if (!['https:','http:'].includes(new URL(url).protocol)) return text(label); }
+    catch { return text(label); }
+    return `<a href="${text(url)}" target="_blank" rel="noopener"${description ? ` aria-label="${text(description)}"` : ''}>${text(label)}</a>`;
+  };
+  const records = [...collection].sort((a,b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+  list.innerHTML = records.map(object => {
+    // The Getty archive manifest IDs were checked against the original IIIF
+    // @id values. Met source records provide the object-level rights evidence.
+    const manifest = /\/manifest_([a-f0-9-]+)\.json$/i.exec(object.archivePath || '');
+    const evidenceURL = shortMuseum(object.museum) === 'Getty' && manifest
+      ? `https://media.getty.edu/iiif/manifest/${manifest[1]}` : object.source;
+    const rightsLabel = object.rights === 'CC0 1.0' ? 'Image: CC0 1.0' : `Image rights: ${object.rights || 'see source'}`;
+    return `<li class="image-credit" data-credit-id="${text(object.id)}"><p class="image-credit-title">${link(object.source,object.title)}</p><p class="image-credit-museum">${text(object.museum)}</p><p class="image-credit-links">${link(object.rightsURL,rightsLabel)}<span aria-hidden="true">·</span>${link(object.image,'Image file',`Original image file for ${object.title}`)}<span aria-hidden="true">·</span>${link(evidenceURL,'Rights evidence',`Source rights evidence for ${object.title} from ${object.museum}`)}</p></li>`;
+  }).join('');
+  const metCount = collection.filter(object => shortMuseum(object.museum) === 'The Met').length;
+  const gettyCount = collection.length-metCount;
+  $('#image-credits-status').innerHTML = `${collection.length} collection photographs: ${metCount} from The Met and ${gettyCount} from Getty. Image rights are stated separately from museum-authored text. The released <a href="data/gallery.json">collection source records</a> retain the original rights statements and archive references.`;
+}
+
 function selectHeroObjects() {
   // Spread the opening display across regions and object types.
   const chosen = [];
@@ -332,7 +355,7 @@ function configureInteractions() {
 configureInteractions();
 Promise.allSettled([getJSON('data/gallery.json'),getJSON('data/leaderboard.json')]).then(results => {
   const [gallery,leaderboard] = results;
-  if (gallery.status === 'fulfilled') {collection=Array.isArray(gallery.value)?gallery.value:gallery.value.objects;initializeFilters();selectHeroObjects();filterCollection();}
+  if (gallery.status === 'fulfilled') {collection=Array.isArray(gallery.value)?gallery.value:gallery.value.objects;initializeFilters();selectHeroObjects();filterCollection();renderImageCredits();}
   else {$('#gallery-count').textContent='The collection could not be loaded. Please reload or browse the dataset on Hugging Face.';$('#discover-button').disabled=true;$('#motion-toggle').disabled=true;}
   if (leaderboard.status === 'fulfilled') {tableData=leaderboard.value;renderLeaderboard();renderComparison();let lastWidth=0;new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(Math.abs(width-lastWidth)>2){lastWidth=width;renderLeaderboard();renderComparison();}}).observe($('#ranking-chart'));}
   else {$('#ranking-chart').innerHTML='<p>The results could not be loaded. Please reload or use the downloadable dataset.</p>';}
