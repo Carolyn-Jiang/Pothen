@@ -14,7 +14,7 @@ This is a buildless static website. Serve the repository root over HTTP; no depe
 python3 -m http.server 8000
 ```
 
-GitHub Pages should publish `main` from `/ (root)`. `.nojekyll` prevents Jekyll preprocessing. The paper download lives at `assets/Pothen.pdf`.
+GitHub Pages should publish `main` from `/ (root)`. `.nojekyll` prevents Jekyll preprocessing. Paper links and the citation URL point to [arXiv](https://arxiv.org/abs/2604.07338).
 
 ## Interaction
 
@@ -22,7 +22,7 @@ GitHub Pages should publish `main` from `/ (root)`. `.nojekyll` prevents Jekyll 
 - Leaderboard: a full-width interactive SVG bar-and-dot ranking chart, placed immediately below the compact hero. Switch among Mean, Ctx, Acc, and all five individual fields; reverse the point-estimate sort; search endpoints; hover or focus a model for exact values, coverage, and reported 95% confidence intervals. Click a model or press Enter/Space to select it for comparison. No HTML table is used.
 - Model comparison: select any two endpoints by name or from the ranking. A second large grouped bar chart compares their five field scores on a shared 0–100% scale; Mean/Ctx/Acc summaries show descriptive A−B differences in percentage points. Selections persist across metric switches and sorting.
 - Plot semantics: every ranking axis starts at zero, and its upper bound covers all nine endpoints and reported CI bounds, independent of search. Only Mean/Ctx/Acc have confidence intervals and pooled references in the release; individual-field views do not invent them. Point-estimate ordering is exploratory; no significance claim is inferred from marginal intervals.
-- The wide desktop layout uses 94% of the viewport, a 20 px base font, and large directly labelled plots. Small screens use stacked ranking rows and a 92% layout without page-level horizontal scrolling. The layout supports visible keyboard focus, native dialog focus handling, and reduced-motion preferences. Automatic motion is never started on page load.
+- The centered desktop layout uses a 1380 px main container with 64 px inner gutters and a 1680 px gallery, a 20 px base font, and large directly labelled plots. Gutters reduce to 34 px and 22 px on smaller screens; ranking rows stack without page-level horizontal scrolling. The layout supports visible keyboard focus, native dialog focus handling, and reduced-motion preferences. Automatic motion is never started on page load.
 
 ## Data provenance
 
