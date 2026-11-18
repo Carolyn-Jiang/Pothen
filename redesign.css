@@ -38,7 +38,7 @@
 @media(max-width:720px){.source-footer .footer-brand-row{align-items:flex-start;flex-direction:column;gap:20px}.source-footer .footer-museums{justify-content:flex-start;gap:10px 20px}.source-footer .image-credits-grid{grid-template-columns:1fr}.source-footer .image-credits>summary{align-items:flex-start}.source-footer .footer-rights-section{margin-bottom:20px}}
 
 /* All visible content shares the gallery boundary; gutters sit outside it. */
-:root{--content-max:1680px;--shell-max:calc(var(--content-max) + 2 * var(--shell-padding));--gallery-max:var(--content-max)}
+:root{--content-max:1344px;--shell-max:calc(var(--content-max) + 2 * var(--shell-padding));--gallery-max:var(--content-max)}
 .collection{padding-inline:max(var(--shell-padding),calc((100% - var(--content-max))/2))}
 .collection>*{max-width:var(--content-max)}
 .benchmark-banner.section-shell{width:calc(100% - 2 * var(--shell-padding));max-width:var(--content-max);margin:0 auto;padding:24px 28px;border-radius:9px}
