@@ -10,8 +10,8 @@
   <meta property="og:description" content="750 objects. Five fields. One attribution. Explore the benchmark, collection, and leaderboard.">
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css?v=2">
-  <link rel="stylesheet" href="redesign.css?v=6">
-  <script src="app.js?v=4" defer></script>
+  <link rel="stylesheet" href="redesign.css?v=7">
+  <script src="app.js?v=5" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -64,6 +64,28 @@
       <div class="benchmark-banner-bottom">
         <p class="banner-result"><strong>6.01% complete records</strong> — all five fields compatible for 393 of 6,542 valid outputs. Mean field compatibility: 44.01%; all four contextual fields (Ctx): 13.30%.</p>
         <p class="banner-protocol">Full-run DS-J scoring; valid-output denominators only. The 208 invalid outputs are reported separately. Empty references assess uncertainty handling rather than recovery of a recorded attribute.</p>
+      </div>
+    </section>
+
+    <section id="film" class="film" aria-labelledby="film-title">
+      <div class="film-copy">
+        <h2 id="film-title">Pothen on film</h2>
+        <div class="film-languages" role="group" aria-label="Film language" hidden>
+          <button type="button" aria-controls="film-video" aria-pressed="true"
+                  data-film-language="en" data-duration="2:30">English</button>
+          <button type="button" aria-controls="film-video" aria-pressed="false"
+                  data-film-language="zh" data-duration="2:31">Chinese</button>
+        </div>
+        <p class="film-links"><a href="assets/film/pothen-en.mp4">Watch in English</a> · <a href="assets/film/pothen-zh.mp4">Watch in Chinese</a></p>
+        <p id="film-version" aria-live="polite">English · 2:30</p>
+      </div>
+      <div class="film-screen">
+        <video id="film-video" controls playsinline preload="none" width="1920" height="1080"
+               aria-label="Pothen film in English" poster="assets/film/pothen-en.jpg"
+               src="assets/film/pothen-en.mp4"></video>
+        <button class="film-play" type="button" aria-label="Play the English film" hidden>
+          <svg viewBox="0 0 24 24" width="25" height="25" fill="currentColor" aria-hidden="true"><path d="M7 3.5 21 12 7 20.5z"/></svg>
+        </button>
       </div>
     </section>
 

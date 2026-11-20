@@ -352,6 +352,59 @@ function configureInteractions() {
   reducedMotion.addEventListener('change',stopTour);
 }
 
+function configureFilm() {
+  const film = document.getElementById('film');
+  const video = film.querySelector('video');
+  const play = film.querySelector('.film-play');
+  const languages = film.querySelector('.film-languages');
+  const links = film.querySelector('.film-links');
+  const status = film.querySelector('#film-version');
+
+  function showPoster() {
+    video.controls = false;
+    play.hidden = false;
+  }
+
+  languages.addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button || button.getAttribute('aria-pressed') === 'true') return;
+
+    const language = button.dataset.filmLanguage;
+    const name = button.textContent;
+    video.pause();
+    video.poster = 'assets/film/pothen-' + language + '.jpg';
+    video.src = 'assets/film/pothen-' + language + '.mp4';
+    video.load();
+    video.setAttribute('aria-label', 'Pothen film in ' + name);
+    play.setAttribute('aria-label', 'Play the ' + name + ' film');
+    for (const option of languages.querySelectorAll('button')) {
+      option.setAttribute('aria-pressed', String(option === button));
+    }
+    status.textContent = name + ' · ' + button.dataset.duration;
+    links.hidden = true;
+    showPoster();
+  });
+
+  play.addEventListener('click', () => {
+    video.controls = true;
+    play.hidden = true;
+    video.focus();
+    video.play().catch(error => {
+      if (error.name !== 'AbortError') {
+        showPoster();
+        links.hidden = false;
+      }
+    });
+  });
+  video.addEventListener('error', () => {
+    links.hidden = false;
+  });
+  languages.hidden = false;
+  links.hidden = true;
+  showPoster();
+}
+
+configureFilm();
 configureInteractions();
 Promise.allSettled([getJSON('data/gallery.json'),getJSON('data/leaderboard.json')]).then(results => {
   const [gallery,leaderboard] = results;
